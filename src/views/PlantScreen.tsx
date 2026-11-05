@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   Pressable,
   ScrollView,
   StatusBar,
@@ -12,6 +11,7 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { HistoryDialog } from '../components/HistoryDialog';
 import { OverviewWeb } from '../components/OverviewWeb';
 import { ThresholdDialog } from '../components/ThresholdDialog';
 import { isAlarm } from '../domain/equipment';
@@ -27,10 +27,11 @@ function round(v: number): string {
   return `${v.toFixed(1)} °C`;
 }
 
-function EquipmentCard({ item, onToggle, onEditThreshold }: {
+function EquipmentCard({ item, onToggle, onEditThreshold, onShowHistory }: {
   item: Equipment;
   onToggle: (id: string, enabled: boolean) => void;
   onEditThreshold: (id: string) => void;
+  onShowHistory: (id: string) => void;
 }) {
   const alarm = isAlarm(item);
   return (
@@ -61,7 +62,7 @@ function EquipmentCard({ item, onToggle, onEditThreshold }: {
         </View>
         <Pressable onPress={() => onEditThreshold(item.id)}
           style={styles.inlineButton}><Text style={styles.inlineButtonText}>Umbral</Text></Pressable>
-        <Pressable onPress={() => Alert.alert('Historial', 'A implementar en el examen.')}
+        <Pressable onPress={() => onShowHistory(item.id)}
           style={styles.inlineButton}><Text style={styles.inlineButtonText}>Historial</Text></Pressable>
       </View>
     </View>
@@ -72,6 +73,8 @@ export function PlantScreen() {
   const vm = usePlantViewModel();
   const [thresholdTargetId, setThresholdTargetId] = useState<string | null>(null);
   const thresholdTarget = vm.items.find((device) => device.id === thresholdTargetId);
+  const [historyTargetId, setHistoryTargetId] = useState<string | null>(null);
+  const historyTarget = vm.items.find((device) => device.id === historyTargetId);
 
   const openThreshold = (id: string) => {
     vm.clearThresholdError();
@@ -133,7 +136,7 @@ export function PlantScreen() {
           autoCapitalize="none"
           returnKeyType="search"
         />
-        {vm.items.map((item) => <EquipmentCard key={item.id} item={item} onToggle={(id, enabled) => void vm.changeEnabled(id, enabled)} onEditThreshold={openThreshold} />)}
+        {vm.items.map((item) => <EquipmentCard key={item.id} item={item} onToggle={(id, enabled) => void vm.changeEnabled(id, enabled)} onEditThreshold={openThreshold} onShowHistory={setHistoryTargetId} />)}
         {!vm.items.length && <Text style={styles.empty}>No se encontraron equipos.</Text>}
         <Text style={styles.footnote}>Entorno académico. Los equipos y comandos son simulados; la API externa aporta una referencia climática, no telemetría de una planta real.</Text>
       </ScrollView>
@@ -145,6 +148,9 @@ export function PlantScreen() {
           onSave={(text) => void saveThreshold(thresholdTarget.id, text)}
           onCancel={() => setThresholdTargetId(null)}
         />
+      ) : null}
+      {historyTarget ? (
+        <HistoryDialog equipment={historyTarget} onClose={() => setHistoryTargetId(null)} />
       ) : null}
     </SafeAreaView>
   );
