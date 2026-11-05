@@ -84,6 +84,12 @@ export async function saveEquipmentState(id: string, enabled: boolean): Promise<
   await db.runAsync('UPDATE equipment SET enabled = ? WHERE id = ?', enabled ? 1 : 0, id);
 }
 
+export async function saveMaxTemp(id: string, maxTemp: number): Promise<void> {
+  const db = await openPlantDatabase();
+  const { changes } = await db.runAsync('UPDATE equipment SET max_temp = ? WHERE id = ?', maxTemp, id);
+  if (changes === 0) throw new Error(`El equipo ${id} no existe`);
+}
+
 export async function recordReading(
   id: string,
   temperature: number,

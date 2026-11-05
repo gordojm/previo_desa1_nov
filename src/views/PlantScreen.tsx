@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -13,6 +13,8 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { OverviewWeb } from '../components/OverviewWeb';
+import { ThresholdDialog } from '../components/ThresholdDialog';
+import { isAlarm } from '../domain/equipment';
 import type { Equipment } from '../domain/types';
 import { usePlantViewModel } from '../viewmodel/usePlantViewModel';
 
@@ -25,11 +27,12 @@ function round(v: number): string {
   return `${v.toFixed(1)} °C`;
 }
 
-function EquipmentCard({ item, onToggle }: {
+function EquipmentCard({ item, onToggle, onEditThreshold }: {
   item: Equipment;
   onToggle: (id: string, enabled: boolean) => void;
+  onEditThreshold: (id: string) => void;
 }) {
-  const alarm = item.enabled === 1 && item.temperature >= item.maxTemp;
+  const alarm = isAlarm(item);
   return (
     <View style={styles.equipmentCard}>
       <View style={styles.cardTop}>
@@ -56,7 +59,7 @@ function EquipmentCard({ item, onToggle }: {
             {alarm ? '● ALARMA' : item.enabled ? '● OPERATIVO' : '○ DETENIDO'}
           </Text>
         </View>
-        <Pressable onPress={() => Alert.alert('Configuración', 'A implementar en el examen.')}
+        <Pressable onPress={() => onEditThreshold(item.id)}
           style={styles.inlineButton}><Text style={styles.inlineButtonText}>Umbral</Text></Pressable>
         <Pressable onPress={() => Alert.alert('Historial', 'A implementar en el examen.')}
           style={styles.inlineButton}><Text style={styles.inlineButtonText}>Historial</Text></Pressable>
@@ -67,8 +70,18 @@ function EquipmentCard({ item, onToggle }: {
 
 export function PlantScreen() {
   const vm = usePlantViewModel();
-  const active = vm.items.filter((device) => device.enabled === 1).length;
-  const alarms = vm.items.filter((device) => device.enabled === 1 && device.temperature >= device.maxTemp).length;
+  const [thresholdTargetId, setThresholdTargetId] = useState<string | null>(null);
+  const thresholdTarget = vm.items.find((device) => device.id === thresholdTargetId);
+
+  const openThreshold = (id: string) => {
+    vm.clearThresholdError();
+    setThresholdTargetId(id);
+  };
+
+  const saveThreshold = async (id: string, text: string) => {
+    const saved = await vm.saveThreshold(id, text);
+    if (saved) setThresholdTargetId(null);
+  };
 
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
@@ -86,8 +99,8 @@ export function PlantScreen() {
 
         <View style={styles.statsRow}>
           <View style={styles.stat}><Text style={styles.statValue}>{vm.items.length}</Text><Text style={styles.statLabel}>Visibles</Text></View>
-          <View style={styles.stat}><Text style={styles.statValue}>{active}</Text><Text style={styles.statLabel}>En marcha</Text></View>
-          <View style={styles.stat}><Text style={[styles.statValue, { color: alarms ? C.red : C.ink }]}>{alarms}</Text><Text style={styles.statLabel}>Alarmas</Text></View>
+          <View style={styles.stat}><Text style={styles.statValue}>{vm.activeCount}</Text><Text style={styles.statLabel}>En marcha</Text></View>
+          <View style={styles.stat}><Text style={[styles.statValue, { color: vm.alarmCount ? C.red : C.ink }]}>{vm.alarmCount}</Text><Text style={styles.statLabel}>Alarmas</Text></View>
         </View>
 
         <View style={styles.statusRow}>
@@ -120,10 +133,19 @@ export function PlantScreen() {
           autoCapitalize="none"
           returnKeyType="search"
         />
-        {vm.items.map((item) => <EquipmentCard key={item.id} item={item} onToggle={(id, enabled) => void vm.changeEnabled(id, enabled)} />)}
+        {vm.items.map((item) => <EquipmentCard key={item.id} item={item} onToggle={(id, enabled) => void vm.changeEnabled(id, enabled)} onEditThreshold={openThreshold} />)}
         {!vm.items.length && <Text style={styles.empty}>No se encontraron equipos.</Text>}
         <Text style={styles.footnote}>Entorno académico. Los equipos y comandos son simulados; la API externa aporta una referencia climática, no telemetría de una planta real.</Text>
       </ScrollView>
+      {thresholdTarget ? (
+        <ThresholdDialog
+          equipment={thresholdTarget}
+          saving={vm.savingThreshold}
+          error={vm.thresholdError}
+          onSave={(text) => void saveThreshold(thresholdTarget.id, text)}
+          onCancel={() => setThresholdTargetId(null)}
+        />
+      ) : null}
     </SafeAreaView>
   );
 }

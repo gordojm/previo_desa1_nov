@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Accelerometer } from 'expo-sensors';
 import type { Equipment, SyncMode } from '../domain/types';
+import { isAlarm, parseThreshold } from '../domain/equipment';
 import { sqlitePlantRepository, type PlantRepository } from '../data/plantRepository';
 
 type ListRequest = {
@@ -17,8 +18,14 @@ export interface PlantViewModel {
   mode: SyncMode;
   humidity: number | null;
   vibration: number | null;
+  activeCount: number;
+  alarmCount: number;
+  savingThreshold: boolean;
+  thresholdError: string | null;
   search: (text: string) => void;
   changeEnabled: (id: string, enabled: boolean) => Promise<void>;
+  saveThreshold: (id: string, text: string) => Promise<boolean>;
+  clearThresholdError: () => void;
   simulate: () => Promise<void>;
   sync: () => Promise<void>;
 }
@@ -35,6 +42,11 @@ export function usePlantViewModel(repo: PlantRepository = sqlitePlantRepository)
   const [mode, setMode] = useState<SyncMode>('inicial');
   const [humidity, setHumidity] = useState<number | null>(null);
   const [vibration, setVibration] = useState<number | null>(null);
+  const [savingThreshold, setSavingThreshold] = useState(false);
+  const [thresholdError, setThresholdError] = useState<string | null>(null);
+
+  const activeCount = items.filter((item) => item.enabled === 1).length;
+  const alarmCount = items.filter(isAlarm).length;
 
   // Every request is a new object, so the cleanup discards any response still pending.
   useEffect(() => {
@@ -99,6 +111,30 @@ export function usePlantViewModel(repo: PlantRepository = sqlitePlantRepository)
     }
   };
 
+  // Pessimistic: the list only changes after SQLite accepted the new limit.
+  const saveThreshold = async (id: string, text: string): Promise<boolean> => {
+    if (savingThreshold) return false;
+    const maxTemp = parseThreshold(text);
+    if (maxTemp === null) {
+      setThresholdError('Ingresá un número mayor que 0 y menor o igual a 150.');
+      return false;
+    }
+    setSavingThreshold(true);
+    setThresholdError(null);
+    try {
+      await repo.saveMaxTemp(id, maxTemp);
+      refreshList(`Límite de ${id} actualizado a ${maxTemp.toFixed(1)} °C.`, 'No se pudo actualizar la vista');
+      return true;
+    } catch (error) {
+      setThresholdError(`No se pudo guardar el límite: ${String(error)}`);
+      return false;
+    } finally {
+      setSavingThreshold(false);
+    }
+  };
+
+  const clearThresholdError = () => setThresholdError(null);
+
   const simulate = async () => {
     if (loading) return;
     setLoading(true);
@@ -135,6 +171,7 @@ export function usePlantViewModel(repo: PlantRepository = sqlitePlantRepository)
 
   return {
     items, filter: listRequest.filter, loading, notice, mode, humidity, vibration,
-    search, changeEnabled, simulate, sync,
+    activeCount, alarmCount, savingThreshold, thresholdError,
+    search, changeEnabled, saveThreshold, clearThresholdError, simulate, sync,
   };
 }

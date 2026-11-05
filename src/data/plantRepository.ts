@@ -1,6 +1,6 @@
 import type { Equipment } from '../domain/types';
 import { getOutdoorReference } from '../network/ambientApi';
-import { findEquipment, recordReading, saveEquipmentState } from './localDb';
+import { findEquipment, recordReading, saveEquipmentState, saveMaxTemp } from './localDb';
 
 const AMBIENT_NODE_ID = 'A-003';
 
@@ -12,6 +12,7 @@ type SyncResult = { temperature: number; humidity: number | null };
 export interface PlantRepository {
   findEquipment(filter: string): Promise<Equipment[]>;
   saveEquipmentState(id: string, enabled: boolean): Promise<void>;
+  saveMaxTemp(id: string, maxTemp: number): Promise<void>;
   simulateCycle(equipment: SimulationInput[]): Promise<void>;
   syncReference(): Promise<SyncResult>;
 }
@@ -33,6 +34,7 @@ export async function syncReference(): Promise<SyncResult> {
 export const sqlitePlantRepository: PlantRepository = {
   findEquipment,
   saveEquipmentState,
+  saveMaxTemp,
   simulateCycle,
   syncReference,
 };
@@ -56,6 +58,9 @@ export const createInMemoryRepository = (initial: Equipment[] = []): PlantReposi
       equipment = equipment.map((item) =>
         item.id === id ? { ...item, enabled: enabled ? 1 : 0 } : item
       );
+    },
+    saveMaxTemp: async (id, maxTemp) => {
+      equipment = equipment.map((item) => (item.id === id ? { ...item, maxTemp } : item));
     },
     simulateCycle: async (items) => {
       for (const item of items) {
