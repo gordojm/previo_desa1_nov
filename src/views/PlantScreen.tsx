@@ -72,7 +72,7 @@ export function PlantScreen() {
 
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
-      <StatusBar barStyle="dark-content" backgroundColor={C.bg} />
+      <StatusBar barStyle="dark-content" />
       <ScrollView contentContainerStyle={styles.page} keyboardShouldPersistTaps="handled">
         <View style={styles.header}>
           <View style={styles.brandMark}><Text style={{ color: '#FFF', fontSize: 18, fontWeight: '900' }}>Ⅱ</Text></View>
@@ -114,7 +114,7 @@ export function PlantScreen() {
         <TextInput
           style={styles.search}
           value={vm.filter}
-          onChangeText={(text) => void vm.search(text)}
+          onChangeText={vm.search}
           placeholder="Buscar por código o nombre"
           placeholderTextColor="#8C9CB0"
           autoCapitalize="none"

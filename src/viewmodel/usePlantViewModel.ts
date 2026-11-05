@@ -1,39 +1,58 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Accelerometer } from 'expo-sensors';
 import type { Equipment, SyncMode } from '../domain/types';
-import { findEquipment, saveEquipmentState } from '../data/localDb';
-import { simulateCycle, syncReference } from '../data/plantRepository';
+import { sqlitePlantRepository, type PlantRepository } from '../data/plantRepository';
 
-export function usePlantViewModel() {
+type ListRequest = {
+  filter: string;
+  successNotice: string;
+  errorPrefix: string;
+};
+
+export interface PlantViewModel {
+  items: Equipment[];
+  filter: string;
+  loading: boolean;
+  notice: string;
+  mode: SyncMode;
+  humidity: number | null;
+  vibration: number | null;
+  search: (text: string) => void;
+  changeEnabled: (id: string, enabled: boolean) => Promise<void>;
+  simulate: () => Promise<void>;
+  sync: () => Promise<void>;
+}
+
+export function usePlantViewModel(repo: PlantRepository = sqlitePlantRepository): PlantViewModel {
   const [items, setItems] = useState<Equipment[]>([]);
-  const [filter, setFilter] = useState('');
+  const [listRequest, setListRequest] = useState<ListRequest>({
+    filter: '',
+    successNotice: 'Equipos locales listos.',
+    errorPrefix: 'No se pudieron cargar equipos',
+  });
   const [loading, setLoading] = useState(false);
   const [notice, setNotice] = useState('Cargando equipos locales…');
   const [mode, setMode] = useState<SyncMode>('inicial');
   const [humidity, setHumidity] = useState<number | null>(null);
   const [vibration, setVibration] = useState<number | null>(null);
 
-  const reload = useCallback(async (text: string) => {
-    const rows = await findEquipment(text);
-    setItems(rows);
-  }, []);
-
+  // Every request is a new object, so the cleanup discards any response still pending.
   useEffect(() => {
-    let alive = true;
-    findEquipment('')
+    let isCurrent = true;
+    repo.findEquipment(listRequest.filter)
       .then((rows) => {
-        if (alive) {
+        if (isCurrent) {
           setItems(rows);
-          setNotice('Equipos locales listos.');
+          setNotice(listRequest.successNotice);
         }
       })
       .catch((error: unknown) => {
-        if (alive) setNotice(`No se pudieron cargar equipos: ${String(error)}`);
+        if (isCurrent) setNotice(`${listRequest.errorPrefix}: ${String(error)}`);
       });
     return () => {
-      alive = false;
+      isCurrent = false;
     };
-  }, []);
+  }, [listRequest, repo]);
 
   useEffect(() => {
     let active = true;
@@ -55,14 +74,17 @@ export function usePlantViewModel() {
     };
   }, []);
 
-  const search = async (text: string) => {
-    setFilter(text);
-    try {
-      await reload(text);
-      setNotice('Listado actualizado.');
-    } catch (error) {
-      setNotice(`Error al filtrar: ${String(error)}`);
-    }
+  // The functional form reads the latest filter, not the one captured by this render.
+  const refreshList = (successNotice: string, errorPrefix: string) => {
+    setListRequest((previous) => ({ filter: previous.filter, successNotice, errorPrefix }));
+  };
+
+  const search = (text: string) => {
+    setListRequest({
+      filter: text,
+      successNotice: 'Listado actualizado.',
+      errorPrefix: 'Error al filtrar',
+    });
   };
 
   const changeEnabled = async (id: string, enabled: boolean) => {
@@ -70,7 +92,7 @@ export function usePlantViewModel() {
       item.id === id ? { ...item, enabled: enabled ? 1 : 0 } : item
     ));
     try {
-      await saveEquipmentState(id, enabled);
+      await repo.saveEquipmentState(id, enabled);
       setNotice(`Comando local aplicado a ${id}.`);
     } catch (error) {
       setNotice(`Error al guardar el estado: ${String(error)}`);
@@ -81,11 +103,10 @@ export function usePlantViewModel() {
     if (loading) return;
     setLoading(true);
     try {
-      const all = await findEquipment('');
-      await simulateCycle(all);
-      await reload(filter);
+      const all = await repo.findEquipment('');
+      await repo.simulateCycle(all);
       setMode('simulado');
-      setNotice('Lecturas simuladas registradas en SQLite.');
+      refreshList('Lecturas simuladas registradas en SQLite.', 'No se pudo simular');
     } catch (error) {
       setNotice(`No se pudo simular: ${String(error)}`);
     } finally {
@@ -96,28 +117,24 @@ export function usePlantViewModel() {
   const sync = async () => {
     if (loading) return;
     setLoading(true);
+    let successNotice: string;
     try {
-      const all = await findEquipment('');
-      await simulateCycle(all);
-      const result = await syncReference();
+      const all = await repo.findEquipment('');
+      await repo.simulateCycle(all);
+      const result = await repo.syncReference();
       setHumidity(result.humidity);
       setMode('sincronizado');
-      setNotice('Referencia ambiental recibida por HTTP y guardada.');
+      successNotice = 'Referencia ambiental recibida por HTTP y guardada.';
     } catch {
       setMode('simulado');
-      setNotice('Sin conexión externa. Se registraron lecturas simuladas.');
-    } finally {
-      try {
-        await reload(filter);
-      } catch (error) {
-        setNotice(`No se pudo actualizar la vista: ${String(error)}`);
-      }
-      setLoading(false);
+      successNotice = 'Sin conexión externa. Se registraron lecturas simuladas.';
     }
+    refreshList(successNotice, 'No se pudo actualizar la vista');
+    setLoading(false);
   };
 
   return {
-    items, filter, loading, notice, mode, humidity, vibration,
+    items, filter: listRequest.filter, loading, notice, mode, humidity, vibration,
     search, changeEnabled, simulate, sync,
   };
 }
