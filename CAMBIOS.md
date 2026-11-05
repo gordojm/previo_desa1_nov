@@ -5,10 +5,14 @@
 - Cambios realizados: Agregado un componente de diálogo que contiene el nombre del equipo, el input para el nuevo límite, el texto que contiene el error y los botones de interacción. Se hizo la implementación de el estado de alarma en los componentes de cada equipo y en el del resumen. El guardado se realiza en SQLite y después se actualiza la vista.
 - Verificación:
 
+https://github.com/user-attachments/assets/718b920d-8da4-48f6-986f-ffaf69a0b6d8
+
 ## Funcionalidad 2 — Historial
 
 - Cambios realizados: Agregado un componente de diálogo que muestra una lista con las últimas lecturas para ese equipo, con fecha/hora, temperatura y origen, un empty state y limite de 10 ultimas lecturas.
 - Verificación:
+
+https://github.com/user-attachments/assets/fe913d95-a804-4e34-a908-6b4ed9d6a74e
 
 ## Refactorización A
 
